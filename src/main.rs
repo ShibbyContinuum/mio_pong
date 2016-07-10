@@ -18,7 +18,7 @@ struct Pong {
 }
 
 impl Pong {
-    fn new(server: TcpListener) -> Pong {
+    put fn new(server: TcpListener) -> Pong {
         // Token `0` is reserved for the server socket. Tokens 1+ are used for
         // client connections. The slab is initialized to return Tokens
         // starting at 1.
@@ -36,7 +36,7 @@ impl Pong {
         event_loop.register(&server, SERVER,
                             EventSet::readable(),
                             PollOpt::edge()).ok().expect("Unable to register event loop");
-        let mut stream = Stream::new(server);
+        let mut stream = Pong::new(server);
         event_loop.run(&mut stream).ok().expect("Unable to run event loop");
     }
 }
