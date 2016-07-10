@@ -1,0 +1,8 @@
+[package]
+name = "ping_pong"
+version = "0.1.0"
+authors = ["Shibby"]
+
+[dependencies]
+bytes = "0.3.0"
+mio = "0.5.0"
