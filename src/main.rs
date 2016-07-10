@@ -270,3 +270,15 @@ impl State {
         }
     }
 }
+
+fn main() {
+    Stream::start("0.0.0.0:6567".parse().ok().expect("Unable to start server"));
+}
+
+fn drain_to(vec: &mut Vec<u8>, count: usize) {
+    // A very inefficient implementation. A better implementation could be
+    // built using `Vec::drain()`, but the API is currently unstable.
+    for _ in 0..count {
+        vec.remove(0);
+    }
+}
