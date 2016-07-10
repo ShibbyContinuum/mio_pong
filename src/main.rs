@@ -18,7 +18,7 @@ struct Pong {
 }
 
 impl Pong {
-    put fn new(server: TcpListener) -> Pong {
+    pub fn new(server: TcpListener) -> Pong {
         // Token `0` is reserved for the server socket. Tokens 1+ are used for
         // client connections. The slab is initialized to return Tokens
         // starting at 1.
