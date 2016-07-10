@@ -57,8 +57,8 @@ impl mio::Handler for Pong {
 
                         // This will fail when the connection cap is reached
                         let token = self.connections
-                            .insert_with(|token| Connection::new(socket, token))
-//  If we try to fix        .insert_with(|token| Connection::new(socket.0, token))
+                            .insert_with(|token| 
+                                Connection::new(socket.0.try_clone().expect("Failed to Clone"), token))
                             .unwrap();
 
                         // Register the connection with the event loop.
