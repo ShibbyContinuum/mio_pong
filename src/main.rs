@@ -272,7 +272,7 @@ impl State {
 }
 
 fn main() {
-    Stream::start("0.0.0.0:6567".parse().ok().expect("Unable to start server"));
+    Pong::start("0.0.0.0:6567".parse().ok().expect("Unable to start server"));
 }
 
 fn drain_to(vec: &mut Vec<u8>, count: usize) {
