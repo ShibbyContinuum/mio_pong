@@ -1,6 +1,3 @@
-extern crate mio;
-extern crate bytes;
-
 use mio::{TryRead, TryWrite, PollOpt, EventSet, EventLoop};
 use mio::tcp::*;
 use mio::util::Slab;
