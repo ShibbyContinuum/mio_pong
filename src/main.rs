@@ -29,6 +29,16 @@ impl Pong {
             connections: slab,
         }
     }
+    
+    pub fn start(address: SocketAddr) {
+        let server = TcpListener::bind(&address).ok().expect("Unable to bind socket");
+        let mut event_loop = EventLoop::new().ok().expect("Unable to create event loop");
+        event_loop.register(&server, SERVER,
+                            EventSet::readable(),
+                            PollOpt::edge()).ok().expect("Unable to register event loop");
+        let mut stream = Stream::new(server);
+        event_loop.run(&mut stream).ok().expect("Unable to run event loop");
+    }
 }
 
 impl mio::Handler for Pong {
