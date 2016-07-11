@@ -1,5 +1,5 @@
 [root]
-name = "ping_pong"
+name = "mio_pong"
 version = "0.1.0"
 dependencies = [
  "bytes 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",

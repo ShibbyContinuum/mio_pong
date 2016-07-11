@@ -9,7 +9,7 @@ use std::net::SocketAddr;
 const SERVER: Token = Token(0);
 const MAX_LINE: usize = 128;
 
-struct Pong {
+pub struct Pong {
     server: TcpListener,
     connections: Slab<Connection>,
 }

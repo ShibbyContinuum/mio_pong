@@ -13,7 +13,7 @@ use std::fs::OpenOptions;
 const PING: Token = Token(0);
 const MAX_LINE: usize = 128;
 
-struct Ping {
+pub struct Ping {
     connections: TcpStream,
 }
 
