@@ -1,4 +1,4 @@
-use mio::{TryRead, TryWrite, PollOpt, EventSet, EventLoop};
+use mio::{TryRead, TryWrite, PollOpt, EventSet, EventLoop, Token, Handler};
 use mio::tcp::*;
 use mio::util::Slab;
 use bytes::{Buf, Take};
@@ -6,7 +6,7 @@ use std::mem;
 use std::io::Cursor;
 use std::net::SocketAddr;
 
-const SERVER: mio::Token = mio::Token(0);
+const SERVER: Token = Token(0);
 const MAX_LINE: usize = 128;
 
 struct Pong {
@@ -19,7 +19,7 @@ impl Pong {
         // Token `0` is reserved for the server socket. Tokens 1+ are used for
         // client connections. The slab is initialized to return Tokens
         // starting at 1.
-        let slab = Slab::new_starting_at(mio::Token(1), 1024);
+        let slab = Slab::new_starting_at(Token(1), 1024);
 
         Pong {
             server: server,
@@ -38,11 +38,11 @@ impl Pong {
     }
 }
 
-impl mio::Handler for Pong {
+impl Handler for Pong {
     type Timeout = ();
     type Message = ();
 
-    fn ready(&mut self, event_loop: &mut mio::EventLoop<Pong>, token: mio::Token, events: mio::EventSet) {
+    fn ready(&mut self, event_loop: &mut EventLoop<Pong>, token: Token, events: EventSet) {
         match token {
             SERVER => {
                 // Only receive readable events
@@ -62,8 +62,8 @@ impl mio::Handler for Pong {
                         event_loop.register(
                             &self.connections[token].socket,
                             token,
-                            mio::EventSet::readable(),
-                            mio::PollOpt::edge() | mio::PollOpt::oneshot()).unwrap();
+                            EventSet::readable(),
+                            PollOpt::edge() | PollOpt::oneshot()).unwrap();
                     }
                     Ok(None) => {
                         println!("the server socket wasn't actually ready");
@@ -91,12 +91,12 @@ impl mio::Handler for Pong {
 #[derive(Debug)]
 struct Connection {
     socket: TcpStream,
-    token: mio::Token,
+    token: Token,
     state: State,
 }
 
 impl Connection {
-    fn new(socket: TcpStream, token: mio::Token) -> Connection {
+    fn new(socket: TcpStream, token: Token) -> Connection {
         Connection {
             socket: socket,
             token: token,
@@ -104,7 +104,7 @@ impl Connection {
         }
     }
 
-    fn ready(&mut self, event_loop: &mut mio::EventLoop<Pong>, events: mio::EventSet) {
+    fn ready(&mut self, event_loop: &mut EventLoop<Pong>, events: EventSet) {
         match self.state {
             State::Reading(..) => {
                 assert!(events.is_readable(), "unexpected events; events={:?}", events);
@@ -118,7 +118,7 @@ impl Connection {
         }
     }
 
-    fn read(&mut self, event_loop: &mut mio::EventLoop<Pong>) {
+    fn read(&mut self, event_loop: &mut EventLoop<Pong>) {
         match self.socket.try_read_buf(self.state.mut_read_buf()) {
             Ok(Some(0)) => {
                 self.state = State::Closed;
@@ -143,7 +143,7 @@ impl Connection {
         }
     }
 
-    fn write(&mut self, event_loop: &mut mio::EventLoop<Pong>) {
+    fn write(&mut self, event_loop: &mut EventLoop<Pong>) {
         // TODO: handle error
         match self.socket.try_write_buf(self.state.mut_write_buf()) {
             Ok(Some(_)) => {
@@ -165,8 +165,8 @@ impl Connection {
         }
     }
 
-    fn reregister(&self, event_loop: &mut mio::EventLoop<Pong>) {
-        event_loop.reregister(&self.socket, self.token, self.state.event_set(), mio::PollOpt::oneshot())
+    fn reregister(&self, event_loop: &mut EventLoop<Pong>) {
+        event_loop.reregister(&self.socket, self.token, self.state.event_set(), PollOpt::oneshot())
             .unwrap();
     }
 
@@ -256,11 +256,11 @@ impl State {
         }
     }
 
-    fn event_set(&self) -> mio::EventSet {
+    fn event_set(&self) -> EventSet {
         match *self {
-            State::Reading(..) => mio::EventSet::readable(),
-            State::Writing(..) => mio::EventSet::writable(),
-            _ => mio::EventSet::none(),
+            State::Reading(..) => EventSet::readable(),
+            State::Writing(..) => EventSet::writable(),
+            _ => EventSet::none(),
         }
     }
 

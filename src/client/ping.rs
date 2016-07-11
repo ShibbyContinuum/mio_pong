@@ -1,102 +1,78 @@
-use mio::{TryRead, TryWrite, PollOpt, EventSet, EventLoop};
-use mio::tcp::*;
+use mio::tcp::{TcpStream};
+use mio::{Token, TryRead, TryWrite, PollOpt, EventSet, EventLoop, Handler};
 use mio::util::Slab;
+
 use bytes::{Buf, Take};
+
 use std::mem;
 use std::io::Cursor;
 use std::net::SocketAddr;
+use std::io::Read;
+use std::fs::OpenOptions;
 
-const SERVER: mio::Token = mio::Token(0);
+const PING: Token = Token(0);
 const MAX_LINE: usize = 128;
 
-struct Pong {
-    server: TcpListener,
-    connections: Slab<Connection>,
+struct Ping {
+    connections: TcpStream,
 }
 
-impl Pong {
-    pub fn new(server: TcpListener) -> Pong {
-        // Token `0` is reserved for the server socket. Tokens 1+ are used for
-        // client connections. The slab is initialized to return Tokens
-        // starting at 1.
-        let slab = Slab::new_starting_at(mio::Token(1), 1024);
-
-        Pong {
-            server: server,
-            connections: slab,
+impl Ping {
+    pub fn new(connections: TcpStream) -> Ping {
+        Ping {
+            connections: connections,
         }
     }
-    
+
     pub fn start(address: SocketAddr) {
-        let server = TcpListener::bind(&address).ok().expect("Unable to bind socket");
-        let mut event_loop = EventLoop::new().ok().expect("Unable to create event loop");
-        event_loop.register(&server, SERVER,
+        let connections = TcpStream::connect(&address).expect("Unable to bind socket");
+        let mut event_loop = EventLoop::new().expect("Unable to create event loop");
+        event_loop.register(&connections, PING,
                             EventSet::readable(),
-                            PollOpt::edge()).ok().expect("Unable to register event loop");
-        let mut stream = Pong::new(server);
-        event_loop.run(&mut stream).ok().expect("Unable to run event loop");
+                            PollOpt::edge()).expect("Unable to register event loop");
+        let mut ping = Ping::new(connections);
+        event_loop.run(&mut ping).expect("Unable to run event loop");
     }
 }
 
-impl mio::Handler for Pong {
+impl Handler for Ping {
     type Timeout = ();
     type Message = ();
 
-    fn ready(&mut self, event_loop: &mut mio::EventLoop<Pong>, token: mio::Token, events: mio::EventSet) {
-        match token {
-            SERVER => {
-                // Only receive readable events
-                assert!(events.is_readable());
-                println!("the server socket is ready to accept a connection");
-                match self.server.accept() {
-                    Ok(Some(socket)) => {
-                        println!("accepted a new client socket");
-
-                        // This will fail when the connection cap is reached
-                        let token = self.connections
-                            .insert_with(|token| 
-                                Connection::new(socket.0.try_clone().expect("Failed to Clone"), token))
-                            .unwrap();
-
-                        // Register the connection with the event loop.
-                        event_loop.register(
-                            &self.connections[token].socket,
-                            token,
-                            mio::EventSet::readable(),
-                            mio::PollOpt::edge() | mio::PollOpt::oneshot()).unwrap();
-                    }
-                    Ok(None) => {
-                        println!("the server socket wasn't actually ready");
-                    }
-                    Err(e) => {
-                        println!("encountered error while accepting connection; err={:?}", e);
-                        event_loop.shutdown();
+    fn ready(&mut self, 
+        event_loop: &mut EventLoop<Ping>,
+        token: Token,
+        events: EventSet) {
+            match token {
+                PING => {
+                    println!("The Client is ready to accept a connection");
+                    match events.is_readable() {
+                        true => {
+                            let mut vec: Vec<u8> = Vec::new();
+                            self.connections.read_to_end(&mut vec);
+                            event_loop.shutdown();
+                        },
+                        false => {},
                     }
                 }
-            }
-            _ => {
-                self.connections[token].ready(event_loop, events);
 
-                // If handling the event resulted in a closed socket, then
-                // remove the socket from the Slab. This will result in all
-                // resources being freed.
-                if self.connections[token].is_closed() {
-                    let _ = self.connections.remove(token);
+                _ => {
+                    event_loop.shutdown();
                 }
             }
-        }
+        
     }
 }
 
 #[derive(Debug)]
 struct Connection {
     socket: TcpStream,
-    token: mio::Token,
+    token: Token,
     state: State,
 }
 
 impl Connection {
-    fn new(socket: TcpStream, token: mio::Token) -> Connection {
+    fn new(socket: TcpStream, token: Token) -> Connection {
         Connection {
             socket: socket,
             token: token,
@@ -104,7 +80,7 @@ impl Connection {
         }
     }
 
-    fn ready(&mut self, event_loop: &mut mio::EventLoop<Pong>, events: mio::EventSet) {
+    fn ready(&mut self, event_loop: &mut EventLoop<Ping>, events: EventSet) {
         match self.state {
             State::Reading(..) => {
                 assert!(events.is_readable(), "unexpected events; events={:?}", events);
@@ -118,7 +94,7 @@ impl Connection {
         }
     }
 
-    fn read(&mut self, event_loop: &mut mio::EventLoop<Pong>) {
+    fn read(&mut self, event_loop: &mut EventLoop<Ping>) {
         match self.socket.try_read_buf(self.state.mut_read_buf()) {
             Ok(Some(0)) => {
                 self.state = State::Closed;
@@ -143,7 +119,7 @@ impl Connection {
         }
     }
 
-    fn write(&mut self, event_loop: &mut mio::EventLoop<Pong>) {
+    fn write(&mut self, event_loop: &mut EventLoop<Ping>) {
         // TODO: handle error
         match self.socket.try_write_buf(self.state.mut_write_buf()) {
             Ok(Some(_)) => {
@@ -165,8 +141,8 @@ impl Connection {
         }
     }
 
-    fn reregister(&self, event_loop: &mut mio::EventLoop<Pong>) {
-        event_loop.reregister(&self.socket, self.token, self.state.event_set(), mio::PollOpt::oneshot())
+    fn reregister(&self, event_loop: &mut EventLoop<Ping>) {
+        event_loop.reregister(&self.socket, self.token, self.state.event_set(), PollOpt::oneshot())
             .unwrap();
     }
 
@@ -256,11 +232,11 @@ impl State {
         }
     }
 
-    fn event_set(&self) -> mio::EventSet {
+    fn event_set(&self) -> EventSet {
         match *self {
-            State::Reading(..) => mio::EventSet::readable(),
-            State::Writing(..) => mio::EventSet::writable(),
-            _ => mio::EventSet::none(),
+            State::Reading(..) => EventSet::readable(),
+            State::Writing(..) => EventSet::writable(),
+            _ => EventSet::none(),
         }
     }
 
